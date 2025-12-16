@@ -1,0 +1,16 @@
+# Core Libraries
+numpy>=1.23
+opencv-python>=4.7.0,<5.0
+torch>=2.1.0,<2.10
+torchvision>=0.16.0,<0.25
+pillow>=9.5.0
+
+# YOLO-based human detection
+ultralytics>=8.1.0
+
+# Arduino / Serial Communication
+pyserial==3.5
+
+# Visualization / Debugging
+matplotlib>=3.8.0
+tqdm>=4.66.0
