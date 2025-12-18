@@ -1,48 +1,50 @@
-import cv2
 from ultralytics import YOLO
-import time
 
-# Load the YOLOv8 model
-model = YOLO('../models/yolov8s.pt')
+class HumanDetector:
+    def __init__(
+            self,
+            model_path,
+            confidence_threshold = 0.6,
+            stable_frames_required = 5
+    ):
+        # Load the YOLOv8 model
+        self.model = YOLO(model_path)
 
-# Capture real time webcam footage, the index 0 indicates the default laptop camera is used
-cap = cv2.VideoCapture(0)
+        self.confidence_threshold = confidence_threshold
+        self.stable_frames_required = stable_frames_required
 
-# Loop through video frames
-while cap.isOpened():
-    #Read a frame from camera
-    success, frame = cap.read()
+        self.person_frame_count = 0
+        self.human_present = False
 
-    if success:
-        start = time.perf_counter()
+    def process_frame(self, frame):
         # Run YOLOv8 inference on the frame
-        results = model(frame)
+        results = self.model(frame, verbose=False)
+        detections = results[0].boxes
 
-        end = time.perf_counter()
-        total_time = end - start
-        fps = 1 / total_time
+        person_detected_this_frame = False
 
-        # Visualize and display the results on the frame
-        annotated_frame = results[0].plot()
-        cv2.putText(
-            annotated_frame,
-            f"FPS: {int(fps)}",
-            (20, 40),  # position (x, y)
-            cv2.FONT_HERSHEY_SIMPLEX,  # font
-            1,  # font scale
-            (0, 255, 0),  # color (BGR)
-            2  # thickness
-        )
-        cv2.imshow(
-            "YOLOv8 Inference",
-            annotated_frame
-        )
+        # Check all objects
+        if detections is not None:
+            for box in detections:
+                cls_id = int(box.cls[0])
+                confidence = float(box.conf[0])
+                class_name = self.model.names[cls_id]
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break   #Explicitly exited/stopped detection
-    else:
-        break   #Detection stopped because camera is not on
+                # When human detected, do:
+                if class_name == "person" and confidence >= self.confidence_threshold:
+                    person_detected_this_frame = True
+                    break
 
+            print(f"Human presence: {self.human_present}")
 
-cap.release()
-cv2.destroyAllWindows()
+        # Stability logic
+        if person_detected_this_frame:
+            self.person_frame_count += 1
+        else:
+            self.person_frame_count = 0
+            self.human_present = False
+
+        if self.person_frame_count >= self.stable_frames_required:
+            self.human_present = True
+
+        return self.human_present, results
