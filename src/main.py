@@ -51,7 +51,6 @@ def main():
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break  # Explicitly exited/stopped detection
-
     cap.release()
     cv2.destroyAllWindows()
 
