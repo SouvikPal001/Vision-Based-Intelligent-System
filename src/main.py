@@ -1,57 +1,77 @@
 import cv2
 import time
+import serial
+
 from human_detection import HumanDetector
+import config
+
 
 def main():
-    # -------------------- CONFIG --------------------
-    MODEL_PATH = "../models/yolov8s.pt"
-    CAMERA_INDEX = 0
-    # ------------------------------------------------
+    # -------- Serial Initialization --------
+    arduino = serial.Serial(
+        config.SERIAL_PORT,
+        config.BAUD_RATE,
+        timeout=1
+    )
+    time.sleep(2)
+    last_sent = None
 
-    # Initialize detector
+    # -------- Detector Initialization -------
     detector = HumanDetector(
-        model_path=MODEL_PATH,
-        confidence_threshold=0.6,
-        stable_frames_required=5
+        model_path=config.MODEL_PATH,
+        confidence_threshold=config.CONFIDENCE_THRESHOLD,
+        stable_frames_required=config.STABLE_FRAMES_REQUIRED
     )
 
-    # Capture real time webcam footage, the index 0 indicates the default laptop camera is used
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    # -------- Camera Initialization ---------
+    cap = cv2.VideoCapture(config.CAMERA_INDEX)
 
-    # Loop through video frames
+    prev_time = time.time()
+
     while cap.isOpened():
-        # Read a frame from camera
-        success, frame = cap.read()  # (bool,img)
+        success, frame = cap.read()
+        if not success:
+            break
 
-        if not success: break  # Detection stopped because camera is not ON/frames not detected/corrupted frames
+        # FPS calculation
+        current_time = time.time()
+        fps = int(1 / (current_time - prev_time))
+        prev_time = current_time
 
-        # FPS Calculation
-        start = time.perf_counter()
-        fps = int(1 / (time.perf_counter() - start))
-        HUMAN_PRESENT, results = detector.process_frame(frame)
+        # Human detection
+        human_present, results = detector.process_frame(frame)
 
-        # Visualize and display the results on the frame
+        # Serial communication (send only on change)
+        if human_present and last_sent != '1':
+            arduino.write(b'1')
+            last_sent = '1'
+
+        elif not human_present and last_sent != '0':
+            arduino.write(b'0')
+            last_sent = '0'
+
+        # Visualization
         annotated_frame = results[0].plot()
-        status_text = "HUMAN PRESENT" if HUMAN_PRESENT else "NO HUMAN"
-        status_color = (0, 255, 0) if HUMAN_PRESENT else (0, 0, 255)
+        status_text = "HUMAN PRESENT" if human_present else "NO HUMAN"
+        status_color = (0, 255, 0) if human_present else (0, 0, 255)
 
         cv2.putText(
             annotated_frame,
-            f"{status_text} | FPS: {int(fps)}",
-            (20, 40),  # position (x, y)
-            cv2.FONT_HERSHEY_SIMPLEX,  # font
-            1,  # font scale
-            status_color,  # color (BGR)
-            2  # thickness
-        )
-        cv2.imshow(
-            "Vision-Based Intelligent System",
-            annotated_frame
+            f"{status_text} | FPS: {fps}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            status_color,
+            2
         )
 
+        cv2.imshow(config.WINDOW_NAME, annotated_frame)
+
         if cv2.waitKey(1) & 0xFF == ord("q"):
-            break  # Explicitly exited/stopped detection
+            break
+
     cap.release()
+    arduino.close()
     cv2.destroyAllWindows()
 
 
